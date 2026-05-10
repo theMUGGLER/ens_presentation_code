@@ -76,11 +76,3 @@ for ($i = 0; $i -lt $bits.Length; $i += 5) {
 
 $decoded = "$protocol`://b$b32"
 Write-Host "  $decoded" -ForegroundColor Green
-Write-Host ""
-Write-Host "  Opens at: https://vitalik.eth.limo" -ForegroundColor Green
-Write-Host "================================================================" -ForegroundColor DarkGray
-Write-Host ""
-Write-Host "  Stored on the Ethereum blockchain." -ForegroundColor DarkGray
-Write-Host "  No registrar can seize it. No court order removes it." -ForegroundColor DarkGray
-Write-Host "  An attacker swaps this for a C2 IP in one transaction." -ForegroundColor DarkGray
-Write-Host ""
