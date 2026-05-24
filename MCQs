@@ -1,0 +1,270 @@
+MCQs: WordPress Plugin Supply Chain + ENS Abuse
+1. What type of vulnerability best describes CVE-2026-6443?
+
+A. SQL injection in WordPress core
+B. Cross-site scripting in WooCommerce checkout
+C. Embedded malicious code in a WordPress plugin supply chain
+D. Authentication bypass in the WordPress admin panel
+
+Answer: C
+
+2. Why are WordPress ecommerce sites attractive targets for plugin supply-chain attacks?
+
+A. WordPress does not support HTTPS
+B. Ecommerce sites often rely on many third-party plugins with privileged application access
+C. WordPress plugins cannot be updated
+D. Ecommerce sites do not use databases
+
+Answer: B
+
+3. In the demo scenario, why is a filename like wp-comments-posts.php suspicious?
+
+A. WordPress blocks all PHP files with “comments” in the name
+B. It resembles the legitimate WordPress file wp-comments-post.php but includes a subtle extra “s”
+C. It is a known Linux kernel file
+D. It is always created by WooCommerce
+
+Answer: B
+
+4. What is the main purpose of a PHP webshell on a compromised WordPress server?
+
+A. To improve website performance
+B. To encrypt database backups
+C. To allow remote command execution or attacker-controlled access
+D. To validate SSL certificates
+
+Answer: C
+
+5. Why is modifying wp-config.php dangerous?
+
+A. It only affects website styling
+B. It is loaded during WordPress execution and contains sensitive configuration
+C. It is used only for image uploads
+D. It automatically disables all plugins
+
+Answer: B
+
+6. Which of the following is the most accurate description of traditional DNS from a takedown perspective?
+
+A. DNS is fully decentralised and cannot be disrupted
+B. DNS has centralised control points such as registrars, registries, and DNS providers
+C. DNS does not support domain suspension
+D. DNS only works inside local networks
+
+Answer: B
+
+7. What problem does ENS potentially solve for an attacker?
+
+A. It hides malware from antivirus completely
+B. It allows the attacker to use blockchain-based name resolution instead of relying only on traditional DNS
+C. It prevents the victim machine from making network connections
+D. It removes the need for persistence
+
+Answer: B
+
+8. In ENS resolution, what is the role of the ENS Registry?
+
+A. It stores all website HTML files
+B. It maps a namehash to ownership, resolver, and TTL information
+C. It encrypts all Ethereum transactions
+D. It scans domains for malware
+
+Answer: B
+
+9. What does the ENS Resolver usually do?
+
+A. It stores or returns records associated with an ENS name
+B. It deletes malicious smart contracts
+C. It blocks DNS queries
+D. It performs WordPress authentication
+
+Answer: A
+
+10. What cryptographic hash function is commonly associated with Ethereum namehash computation?
+
+A. MD5
+B. SHA-1
+C. Keccak-256
+D. bcrypt
+
+Answer: C
+
+11. What is the correct term for the protocol commonly used to query Ethereum nodes?
+
+A. SMTP over TLS
+B. Ethereum JSON-RPC, often over HTTPS
+C. FTP over SSH
+D. DNSSEC over UDP
+
+Answer: B
+
+12. Why can ENS-based resolution make detection harder for defenders?
+
+A. It prevents all logs from being created
+B. The victim may connect to an Ethereum RPC provider rather than making a direct DNS lookup for the attacker’s C2 domain
+C. It disables endpoint monitoring
+D. It only works on air-gapped systems
+
+Answer: B
+
+13. Which statement about HTTPS-based Ethereum JSON-RPC is most accurate?
+
+A. HTTPS means nobody can see anything, including the RPC provider
+B. HTTPS encrypts traffic in transit, but the RPC provider can still see the JSON-RPC request
+C. HTTPS prevents DNS resolution from ever occurring
+D. HTTPS makes malware impossible to detect
+
+Answer: B
+
+14. Which JSON-RPC method might be suspicious if repeatedly observed from a WordPress server process?
+
+A. eth_call
+B. mail_send
+C. wp_login
+D. dns_lookup
+
+Answer: A
+
+15. Which host-level detection would be most relevant for the WordPress side of this attack?
+
+A. Monitoring for new or modified PHP files in WordPress directories
+B. Monitoring GPU temperature
+C. Detecting Bluetooth pairing attempts
+D. Checking browser bookmarks
+
+Answer: A
+
+16. Which file integrity event should be treated as high priority on a WordPress server?
+
+A. A new .jpg image uploaded by an editor
+B. A new suspicious PHP file appearing in the WordPress root directory
+C. A CSS colour change in a theme file
+D. A normal log rotation event
+
+Answer: B
+
+17. Which PHP function pattern is commonly suspicious in webshells or malicious plugin code?
+
+A. strlen()
+B. array_merge()
+C. eval(base64_decode(...))
+D. date()
+
+Answer: C
+
+18. Why is detection based only on Keccak/namehash signatures insufficient?
+
+A. Keccak is never used by attackers
+B. Attackers can obfuscate, reimplement, or outsource the hashing logic
+C. Keccak only works in Windows environments
+D. Namehash detection only works on DNS logs
+
+Answer: B
+
+19. Which network indicator may suggest ENS or Ethereum RPC abuse from a compromised web server?
+
+A. Outbound HTTPS traffic from PHP/Apache/Nginx worker processes to Ethereum RPC providers
+B. Inbound SSH from an administrator
+C. DNS queries to the company’s own domain
+D. Internal NTP traffic
+
+Answer: A
+
+20. Which of the following is the best layered mitigation strategy?
+
+A. Only block one suspicious IP address
+B. Disable HTTPS
+C. Combine plugin supply-chain controls, file integrity monitoring, PHP behaviour detection, and outbound RPC monitoring
+D. Ignore plugin updates permanently
+
+Answer: C
+
+21. What is the main security lesson from the malicious plugin scenario?
+
+A. Open-source software is always unsafe
+B. Plugin trust and update provenance are critical parts of application security
+C. DNS cannot be monitored
+D. WordPress cannot be used securely
+
+Answer: B
+
+22. Why should the wp-config.php modification be described carefully in a presentation?
+
+A. Because wp-config.php does not exist in WordPress
+B. Because it may be part of the lab emulation rather than confirmed CVE behaviour
+C. Because modifying it improves WordPress security
+D. Because it only affects frontend CSS
+
+Answer: B
+
+23. What is the safest way to present the webshell and ENS beacon flow?
+
+A. As confirmed behaviour of every affected plugin
+B. As an adversary-emulation extension built from the supply-chain compromise scenario
+C. As a DNS vulnerability
+D. As a browser-only attack
+
+Answer: B
+
+24. Which of these is the most precise statement?
+
+A. ENS makes C2 impossible to detect
+B. ENS removes all need for internet access
+C. ENS can act as a decentralised indirection layer for attacker infrastructure
+D. ENS only works with email servers
+
+Answer: C
+
+25. Which detection source would best reveal suspicious changes to wp-config.php?
+
+A. File integrity monitoring
+B. GPU telemetry
+C. DHCP lease logs only
+D. Keyboard input logs
+
+Answer: A
+
+26. Which control helps reduce the risk of malicious WordPress plugin updates?
+
+A. Install plugins from random ZIP files
+B. Disable all logging
+C. Use plugin allowlisting, update review, and trusted-source validation
+D. Give all plugins write access to the filesystem
+
+Answer: C
+
+27. What is the difference between DNS-based C2 and ENS-assisted C2?
+
+A. DNS-based C2 uses only Bluetooth
+B. ENS-assisted C2 can retrieve attacker-controlled resolution data from blockchain smart contracts
+C. ENS-assisted C2 cannot use HTTPS
+D. DNS-based C2 does not require networking
+
+Answer: B
+
+28. What should defenders inspect when looking for Ethereum RPC abuse?
+
+A. Destination domains, SNI, Host headers, User-Agent strings, and JSON-RPC methods
+B. Only screen resolution
+C. Only keyboard language
+D. Only printer logs
+
+Answer: A
+
+29. Which statement about blocking Ethereum RPC providers is most accurate?
+
+A. It is a useful control but can cause false positives and may be bypassed by using alternative providers
+B. It guarantees full remediation
+C. It deletes the attacker’s smart contract
+D. It prevents all HTTPS traffic
+
+Answer: A
+
+30. What is the strongest conclusion from this attack chain?
+
+A. ENS is malicious by design
+B. WordPress is always insecure
+C. Modern C2 detection must include application, endpoint, network, and decentralised-infrastructure visibility
+D. DNS monitoring is no longer useful
+
+Answer: C
