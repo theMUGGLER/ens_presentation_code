@@ -1,0 +1,415 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.wrap{padding:1rem 0}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center}
+.filter-btn{padding:5px 12px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);font-size:12px;cursor:pointer;transition:all .15s}
+.filter-btn.active{background:var(--color-background-secondary);color:var(--color-text-primary);border-color:var(--color-border-primary);font-weight:500}
+.search-box{flex:1;min-width:180px;padding:6px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:13px;background:var(--color-background-primary);color:var(--color-text-primary)}
+.search-box:focus{outline:none;border-color:var(--color-border-primary)}
+.section{margin-bottom:1.5rem}
+.section-title{font-size:13px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;padding-bottom:6px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.rule-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:8px;overflow:hidden;transition:border-color .15s}
+.rule-card:hover{border-color:var(--color-border-secondary)}
+.rule-header{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;cursor:pointer;user-select:none}
+.rule-header:focus{outline:none}
+.priority-badge{flex-shrink:0;font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;margin-top:1px}
+.p1{background:#FAECE7;color:#993C1D}
+.p2{background:#FAEEDA;color:#854F0B}
+.p3{background:#EAF3DE;color:#3B6D11}
+.rule-title{flex:1;font-size:14px;font-weight:500;color:var(--color-text-primary);line-height:1.4}
+.rule-tag{flex-shrink:0;font-size:11px;color:var(--color-text-tertiary);padding:2px 6px;border:0.5px solid var(--color-border-tertiary);border-radius:4px;white-space:nowrap}
+.chevron{flex-shrink:0;font-size:14px;color:var(--color-text-tertiary);transition:transform .2s;margin-top:1px}
+.rule-card.open .chevron{transform:rotate(180deg)}
+.rule-body{display:none;padding:0 12px 12px;border-top:0.5px solid var(--color-border-tertiary)}
+.rule-card.open .rule-body{display:block}
+.rule-section{margin-top:10px}
+.rule-section-label{font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.code-block{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:8px 10px;font-family:var(--font-mono);font-size:11.5px;color:var(--color-text-primary);white-space:pre-wrap;word-break:break-all;line-height:1.55}
+.where-tag{display:inline-block;background:var(--color-background-info,#E6F1FB);color:var(--color-text-info,#185FA5);font-size:11px;padding:2px 8px;border-radius:4px;margin:2px 3px 2px 0}
+.desc{font-size:13px;color:var(--color-text-secondary);line-height:1.6;margin-top:4px}
+.no-results{text-align:center;color:var(--color-text-tertiary);padding:2rem;font-size:14px}
+.stats{font-size:12px;color:var(--color-text-tertiary);margin-left:auto}
+</style>
+
+<div class="wrap">
+<h2 class="sr-only">ENS Detection Rules Reference — interactive filterable list of all detection rules by category and priority</h2>
+
+<div class="controls">
+  <input class="search-box" type="text" placeholder="Search rules…" id="search" oninput="render()">
+  <button class="filter-btn active" onclick="setPrio('all',this)">All</button>
+  <button class="filter-btn" onclick="setPrio('P1',this)">P1 critical</button>
+  <button class="filter-btn" onclick="setPrio('P2',this)">P2 medium</button>
+  <button class="filter-btn" onclick="setPrio('P3',this)">P3 low</button>
+  <span class="stats" id="stats"></span>
+</div>
+
+<div id="root"></div>
+</div>
+
+<script>
+const RULES=[
+{cat:"Lexical / name confusion",id:"L1",prio:"P1",title:"Edit-distance similarity",desc:"Flag ENS names with Levenshtein distance ≤1–2 or Jaro-Winkler similarity ≥0.90 against an allowlisted brand/protocol list.",where:["Python","Offline batch","API pipeline"],logic:`from jellyfish import jaro_winkler_similarity, levenshtein_distance
+BRANDS = ["uniswap","metamask","opensea","aave","curve","ens","coinbase"]
+def check(label):
+    for brand in BRANDS:
+        if levenshtein_distance(label,brand) <= 2:
+            return True, f"edit-dist match: {brand}"
+        if jaro_winkler_similarity(label,brand) >= 0.90:
+            return True, f"jaro-winkler match: {brand}"
+    return False, None`},
+{cat:"Lexical / name confusion",id:"L2",prio:"P1",title:"Homoglyph / confusable characters",desc:"Detect Unicode confusables (UTS #39) and mixed-script labels whose skeleton matches a protected brand.",where:["Python","confusable_homoglyphs lib"],logic:`from confusable_homoglyphs import confusables
+def skeleton(s):
+    return confusables.is_confusable(s, preferred_aliases=['latin'])
+# Flag if skeleton(label) matches any brand skeleton`},
+{cat:"Lexical / name confusion",id:"L3",prio:"P1",title:"Brand keyword misuse",desc:"Regex match on ENS label against known brand/protocol keywords.",where:["Regex","Python","Dune SQL","Indexer"],logic:`import re
+BRAND_RE = re.compile(
+  r'(?i)(uniswap|metamask|opensea|coinbase|aave|curve|blur|ens|'
+  r'ledger|trezor|binance|kraken|walletconnect|zksync|arbitrum|optimism)'
+)
+def check(label): return bool(BRAND_RE.search(label))`},
+{cat:"Lexical / name confusion",id:"L4",prio:"P2",title:"Phishing lure keywords",desc:"Regex match on ENS label against common phishing/social-engineering lure words.",where:["Regex","Python","Dune SQL"],logic:`import re
+LURE_RE = re.compile(
+  r'(?i)(airdrop|claim|verify|support|refund|bonus|reward|login|'
+  r'secure|update|connect|restore|unlock|migration|snapshot|whitelist|mint)'
+)`},
+{cat:"Lexical / name confusion",id:"L5",prio:"P2",title:"Brand + lure combination",desc:"Flag only when both a brand keyword and a lure keyword co-occur in the same ENS label.",where:["Python","Dune SQL"],logic:`# Combine L3 + L4 patterns — flag only on both matching
+def check(label):
+    return bool(BRAND_RE.search(label)) and bool(LURE_RE.search(label))
+# e.g. metamask-support.eth, uniswap-claim.eth`},
+{cat:"Lexical / name confusion",id:"L6",prio:"P2",title:"Suspicious separators / lookalike formatting",desc:"Detect repeated separators, double dots, or support/claim compound substrings.",where:["Regex","Python"],logic:`import re
+SEP_RE = re.compile(
+  r'(?i)(-|_|\\d){2,}|\\.{2,}|(support|help|claim|verify)[-_]?(wallet|airdrop|token|nft)'
+)`},
+
+{cat:"Registration & expiry history",id:"R1",prio:"P1",title:"Dropcatching / rapid re-registration",desc:"Flag NameRegistered events that occur soon after prior expiry and with a different registrant.",where:["Dune Analytics","SQL","Python on ENS subgraph"],logic:`-- Dune SQL (ENS ens.events_view)
+SELECT
+  name, new_owner, old_expiry, new_registered_at,
+  EXTRACT(epoch FROM (new_registered_at - old_expiry)) AS gap_secs
+FROM ens_name_history
+WHERE new_owner <> old_owner
+  AND gap_secs < 86400  -- re-registered within 24h of expiry`},
+{cat:"Registration & expiry history",id:"R2",prio:"P1",title:"Post-expiry residual trust payments",desc:"After re-registration by new owner, flag inbound ETH/ERC20 from wallets that previously interacted with the old resolved address.",where:["Dune Analytics","SQL","Python + on-chain data"],logic:`-- Flag transfers within 7-30 days of re-registration
+-- from addresses that historically sent to old_resolved_addr
+SELECT t.* FROM transfers t
+JOIN ens_reregistrations r
+  ON t.to_addr = r.new_resolved_addr
+  AND t.from_addr IN (
+    SELECT DISTINCT from_addr FROM transfers
+    WHERE to_addr = r.old_resolved_addr
+  )
+  AND t.block_time BETWEEN r.registered_at
+    AND r.registered_at + INTERVAL '30 days'`},
+{cat:"Registration & expiry history",id:"R3",prio:"P1",title:"Bulk registration by same wallet",desc:"Flag any owner that registers ≥ N ENS names within 24 hours, especially with similar lexical patterns.",where:["Dune Analytics","SQL"],logic:`SELECT registrant, COUNT(*) as cnt
+FROM ens.events_NameRegistered
+WHERE evt_block_time >= NOW() - INTERVAL '24 hours'
+GROUP BY registrant
+HAVING COUNT(*) >= 5  -- tune N
+ORDER BY cnt DESC`},
+{cat:"Registration & expiry history",id:"R4",prio:"P2",title:"Newly registered name used immediately",desc:"Flag ENS names where addr/text/contenthash records are set within minutes/hours of registration and then receive inbound transfers.",where:["Dune Analytics","SQL","ENS subgraph"],logic:`SELECT name
+FROM ens_events
+WHERE event IN ('addr_set','text_changed','contenthash_changed')
+  AND EXTRACT(epoch FROM (event_time - registered_at)) < 3600
+  -- then join on transfer events from same name's resolved address`},
+{cat:"Registration & expiry history",id:"R5",prio:"P2",title:"Portfolio squatting pattern",desc:"Flag registrants whose portfolio contains multiple brand-similar names by edit-distance or keyword match.",where:["Python","ENS subgraph","Batch job"],logic:`# For each registrant, fetch all their ENS names
+# Run L1/L3 checks across the portfolio
+def portfolio_risk(names):
+    return sum(1 for n in names if brand_match(n) or edit_dist_match(n))`},
+{cat:"Registration & expiry history",id:"R6",prio:"P3",title:"Short-lived registration pattern",desc:"Flag names registered/renewed for minimum period with suspicious records set shortly after creation.",where:["Dune Analytics","SQL"],logic:`SELECT name, registered_at, expires_at,
+  DATEDIFF('day', registered_at, expires_at) AS duration_days
+FROM ens_registrations
+WHERE duration_days <= 28
+  AND has_addr_record = TRUE`},
+
+{cat:"Resolver changes",id:"RS1",prio:"P1",title:"Resolver changed recently before risky activity",desc:"Flag if resolver changes and within 24–72 h addr, text, or contenthash changes also occur.",where:["Dune Analytics","SQL","ENS subgraph"],logic:`SELECT name
+FROM ens_events e1
+JOIN ens_events e2 ON e1.name = e2.name
+WHERE e1.event = 'NewResolver'
+  AND e2.event IN ('AddrChanged','TextChanged','ContenthashChanged')
+  AND e2.block_time BETWEEN e1.block_time
+    AND e1.block_time + INTERVAL '72 hours'`},
+{cat:"Resolver changes",id:"RS2",prio:"P1",title:"Switch to unknown/custom resolver",desc:"Flag resolver addresses not in the ENS public resolver allowlist or previously seen resolver family.",where:["Dune SQL","Python","Allowlist DB"],logic:`KNOWN_RESOLVERS = {
+  "0x4976fb03C32e5B8cfe2b6cCB31c09Ba78EBaBa41",  # ENS Public Resolver v2
+  "0xA2C122BE93b0074270ebeE7f6b7292C7deB45047",  # Public Resolver v1
+}
+def check(resolver_addr):
+    return resolver_addr.lower() not in {r.lower() for r in KNOWN_RESOLVERS}`},
+{cat:"Resolver changes",id:"RS3",prio:"P1",title:"Resolver bytecode novelty",desc:"Fetch resolver bytecode hash; flag if hash is unseen or not matching any known resolver implementation.",where:["Web3.py","Etherscan API","Bytecode hash DB"],logic:`from web3 import Web3
+w3 = Web3(Web3.HTTPProvider(RPC_URL))
+def check(resolver_addr):
+    code = w3.eth.get_code(resolver_addr)
+    code_hash = Web3.keccak(code).hex()
+    return code_hash not in KNOWN_BYTECODE_HASHES`},
+{cat:"Resolver changes",id:"RS4",prio:"P2",title:"Resolver churn",desc:"Flag ENS names that change resolver ≥2–3 times within 30 days.",where:["Dune Analytics","SQL"],logic:`SELECT name, COUNT(*) as resolver_changes
+FROM ens.events_NewResolver
+WHERE evt_block_time >= NOW() - INTERVAL '30 days'
+GROUP BY name
+HAVING COUNT(*) >= 2`},
+{cat:"Resolver changes",id:"RS5",prio:"P2",title:"Shared resolver across suspicious names",desc:"Flag resolver address used by many brand-similar or lure-keyword ENS names.",where:["Graph rule","Python","ENS subgraph"],logic:`# Group all ENS names by resolver address
+# For each resolver, count names flagged by L1/L3/L4
+SELECT resolver_addr, COUNT(*) AS risky_names
+FROM ens_names
+WHERE is_risky = TRUE
+GROUP BY resolver_addr
+HAVING COUNT(*) >= 3`},
+{cat:"Resolver changes",id:"RS6",prio:"P3",title:"Resolver with CCIP/offchain lookup",desc:"Flag resolvers supporting EIP-3668 OffchainLookup; escalate only if endpoint is unknown or records are suspicious.",where:["Web3.py","ABI check"],logic:`# Check ABI for OffchainLookup error or resolve(bytes,bytes) function
+# EIP-3668: resolver reverts with OffchainLookup(sender, urls, ...)
+def supports_ccip(resolver_addr):
+    abi = fetch_abi(resolver_addr)
+    return any(e.get('name') == 'OffchainLookup' for e in abi)`},
+
+{cat:"Mutable addr records",id:"A1",prio:"P1",title:"Recent payment address change",desc:"Flag addr record changes where funds arrive at the new address shortly after.",where:["Dune Analytics","SQL","ENS subgraph"],logic:`SELECT e.name, e.new_addr, t.value_eth, t.block_time
+FROM ens_addr_changes e
+JOIN eth_transfers t ON t.to_addr = e.new_addr
+WHERE t.block_time > e.change_time
+  AND t.block_time < e.change_time + INTERVAL '7 days'`},
+{cat:"Mutable addr records",id:"A2",prio:"P1",title:"Resolved address linked to known scam wallet",desc:"Cross-reference resolved ETH address against Chainabuse, Etherscan labels, phishing DBs, and internal scam clusters.",where:["Threat intel DB","Python","Chainabuse API","Etherscan labels"],logic:`def check(resolved_addr):
+    return (
+        resolved_addr in CHAINABUSE_BLOCKLIST or
+        resolved_addr in ETHERSCAN_PHISHING_LABELS or
+        resolved_addr in INTERNAL_SCAM_CLUSTERS
+    )`},
+{cat:"Mutable addr records",id:"A3",prio:"P1",title:"Address poisoning style similarity",desc:"Flag resolved addresses sharing same prefix/suffix with victim's known trusted address but differing in the middle.",where:["Python","Transaction graph"],logic:`def is_poisoned(resolved, trusted):
+    # Check first 6 and last 4 chars match
+    return (resolved[:6].lower() == trusted[:6].lower() and
+            resolved[-4:].lower() == trusted[-4:].lower() and
+            resolved != trusted)`},
+{cat:"Mutable addr records",id:"A4",prio:"P1",title:"Multiple risky ENS names resolve to same wallet",desc:"Flag wallet if ≥ N suspicious ENS names all resolve to the same address.",where:["Graph rule","Python","ENS subgraph"],logic:`SELECT resolved_addr, COUNT(*) as risky_names
+FROM ens_names
+WHERE is_risky = TRUE
+GROUP BY resolved_addr
+HAVING COUNT(*) >= 3`},
+{cat:"Mutable addr records",id:"A5",prio:"P2",title:"High address churn",desc:"Flag if addr record changes ≥ N times in 7–30 days.",where:["Dune Analytics","SQL"],logic:`SELECT name, COUNT(*) as addr_changes
+FROM ens_addr_changes
+WHERE change_time >= NOW() - INTERVAL '30 days'
+GROUP BY name
+HAVING COUNT(*) >= 3`},
+{cat:"Mutable addr records",id:"A6",prio:"P2",title:"Fresh wallet receives victim-like transfers",desc:"Flag resolved addresses that are newly created/low-history wallets receiving many small inbound transfers from unrelated EOAs.",where:["Transaction graph","Python","Dune SQL"],logic:`SELECT to_addr, COUNT(DISTINCT from_addr) AS unique_senders,
+       MIN(block_time) AS first_seen
+FROM eth_transfers
+GROUP BY to_addr
+HAVING COUNT(DISTINCT from_addr) >= 10
+   AND DATEDIFF('day', MIN(block_time), NOW()) <= 30`},
+{cat:"Mutable addr records",id:"A7",prio:"P3",title:"Forward/reverse resolution mismatch",desc:"Flag if forward resolution points to an address but reverse record points elsewhere or is absent.",where:["Python","ENS SDK","Web3.py"],logic:`from ens import ENS
+ns = ENS.from_web3(w3)
+def check(name):
+    fwd = ns.address(name)
+    rev = ns.name(fwd) if fwd else None
+    return fwd and (rev != name)`},
+
+{cat:"Mutable text records",id:"T1",prio:"P1",title:"URL in text record — suspicious domain",desc:"Extract URLs from text records and enrich with domain age, reputation, redirect analysis, and brand similarity.",where:["Python","Regex","Threat intel APIs","VirusTotal / URLScan"],logic:`import re
+URL_RE = re.compile(r'(?i)https?:\\/\\/[^\\s"\'<>]+')
+def check(text_val):
+    for url in URL_RE.findall(text_val):
+        domain = extract_domain(url)
+        if domain_age(domain) < 30:  # days
+            return True, "fresh domain"
+        if vt_score(domain) > 3:
+            return True, "VT flagged"`},
+{cat:"Mutable text records",id:"T2",prio:"P1",title:"Seed phrase / private key lure",desc:"Regex match for seed phrase or private key language in text records.",where:["Regex","Python","ENS indexer"],logic:`import re
+SEED_RE = re.compile(
+  r'(?i)(seed phrase|recovery phrase|private key|import wallet|'
+  r'restore wallet|12 words|24 words|mnemonic)'
+)`},
+{cat:"Mutable text records",id:"T3",prio:"P1",title:"Wallet approval / signing lure",desc:"Regex match for approval/signing function names or social-engineering phrases targeting wallet signing.",where:["Regex","Python","ENS indexer"],logic:`import re
+SIGN_RE = re.compile(
+  r'(?i)(setApprovalForAll|permit|approve|sign message|connect wallet|'
+  r'wallet drain|drainer|claim token|claim nft)'
+)`},
+{cat:"Mutable text records",id:"T4",prio:"P1",title:"Encoded payload / C2 data",desc:"Detect base64-like blobs or long hex strings in text records that may indicate obfuscated commands or exfil.",where:["Regex","Python"],logic:`import re
+B64_RE = re.compile(r'(?:[A-Za-z0-9+/]{40,}={0,2})')
+HEX_RE = re.compile(r'0x[a-fA-F0-9]{40,}|[a-fA-F0-9]{64,}')`},
+{cat:"Mutable text records",id:"T5",prio:"P2",title:"Social lure fields",desc:"Detect discord, telegram, or form links that may direct victims to phishing channels.",where:["Regex","Python"],logic:`import re
+SOCIAL_RE = re.compile(
+  r'(?i)(discord\\.gg|t\\.me|telegram|twitter\\.com|x\\.com|'
+  r'medium\\.com|linktr\\.ee|forms\\.gle|typeform|support)'
+)`},
+{cat:"Mutable text records",id:"T6",prio:"P2",title:"Text-record churn",desc:"Flag if TextChanged event count ≥ N in 7–30 days for the same name.",where:["Dune Analytics","SQL"],logic:`SELECT name, COUNT(*) AS text_changes
+FROM ens.events_TextChanged
+WHERE evt_block_time >= NOW() - INTERVAL '30 days'
+GROUP BY name
+HAVING COUNT(*) >= 5`},
+{cat:"Mutable text records",id:"T7",prio:"P2",title:"Suspicious key names in text records",desc:"Flag text record keys that look like API/C2/callback configuration.",where:["Regex","Python","ENS indexer"],logic:`import re
+KEY_RE = re.compile(
+  r'(?i)(url|redirect|callback|api|endpoint|server|c2|bot|cmd|config|backup|mirror)'
+)`},
+
+{cat:"Mutable contenthash records",id:"C1",prio:"P1",title:"Recent contenthash change",desc:"Flag if contenthash changes on a name that already has brand/lure/trust signals.",where:["Dune Analytics","SQL","ENS subgraph"],logic:`SELECT name, new_contenthash, block_time
+FROM ens.events_ContenthashChanged
+WHERE name IN (SELECT name FROM risky_ens_names)
+  AND block_time >= NOW() - INTERVAL '7 days'`},
+{cat:"Mutable contenthash records",id:"C2",prio:"P1",title:"Phishing page template match",desc:"Crawl the resolved page and run YARA/HTML rules to detect wallet-drainer phrases, fake claim pages, or copied brand assets.",where:["YARA","Python crawler","BeautifulSoup","IPFS gateway"],logic:`import yara
+RULE = yara.compile(source="""
+rule phishing_page {
+  strings:
+    $a = "setApprovalForAll" nocase
+    $b = "claim your tokens" nocase
+    $c = "connect your wallet" nocase
+    $d = "verify to receive" nocase
+  condition: any of them
+}""")`},
+{cat:"Mutable contenthash records",id:"C3",prio:"P1",title:"Wallet-drainer JavaScript indicators",desc:"Regex / YARA over fetched JS bundles for wallet-drainer function signatures.",where:["YARA","Regex","Python crawler"],logic:`import re
+DRAIN_RE = re.compile(
+  r'(?i)(setApprovalForAll|eth_sign|personal_sign|eth_signTypedData|'
+  r'permit\\(|approve\\(|increaseAllowance|walletconnect|web3modal|drain|seaport)'
+)`},
+{cat:"Mutable contenthash records",id:"C4",prio:"P1",title:"Seed phrase collection form",desc:"YARA/regex over HTML to find input forms soliciting seed phrases or private keys.",where:["YARA","Regex","Python crawler"],logic:`import re
+FORM_RE = re.compile(
+  r'(?i)(seed phrase|recovery phrase|private key|mnemonic).{0,80}(input|textarea|submit)',
+  re.DOTALL
+)`},
+{cat:"Mutable contenthash records",id:"C5",prio:"P2",title:"Rapid CID/contenthash rotation",desc:"Flag if contenthash changes ≥ N times in 7–30 days.",where:["Dune Analytics","SQL"],logic:`SELECT name, COUNT(*) AS cid_changes
+FROM ens.events_ContenthashChanged
+WHERE evt_block_time >= NOW() - INTERVAL '30 days'
+GROUP BY name
+HAVING COUNT(*) >= 3`},
+{cat:"Mutable contenthash records",id:"C6",prio:"P2",title:"IPFS gateway-only availability",desc:"Resolve CID through multiple gateways; flag if only one suspicious/custom gateway serves the content.",where:["Python crawler","IPFS gateways"],logic:`GATEWAYS = ["https://ipfs.io/ipfs/","https://cloudflare-ipfs.com/ipfs/","https://dweb.link/ipfs/"]
+def check(cid):
+    ok = [g for g in GATEWAYS if fetch_ok(g+cid)]
+    return len(ok) <= 1  # only custom gateway responds`},
+{cat:"Mutable contenthash records",id:"C7",prio:"P2",title:"Brand impersonation in page content",desc:"Regex/YARA over fetched page title and body for brand names combined with claim/verify language.",where:["YARA","Regex","Python crawler"],logic:`import re
+BRAND_PAGE_RE = re.compile(
+  r'(?i)(metamask|opensea|uniswap|coinbase|ledger|trezor|airdrop|claim|verify|connect wallet)'
+)`},
+{cat:"Mutable contenthash records",id:"C8",prio:"P3",title:"Newly created CID on risky ENS",desc:"Flag if contenthash/CID appears first-seen recently and is attached to a high-risk ENS name.",where:["IPFS crawler","Python","CID first-seen DB"],logic:`def check(cid, name):
+    first_seen = CID_DB.get(cid)
+    return (first_seen is None or age_days(first_seen) < 7) and is_risky(name)`},
+
+{cat:"Offchain resolution",id:"O1",prio:"P1",title:"CCIP-Read / OffchainLookup present",desc:"Detect EIP-3668 OffchainLookup revert or resolver ABI support. Flag for further inspection.",where:["Web3.py","ABI inspection"],logic:`from web3 import Web3
+def check_ccip(resolver_addr, name):
+    try:
+        ns.address(name)  # triggers resolution
+    except ContractLogicError as e:
+        if 'OffchainLookup' in str(e):
+            return True, extract_urls(e)`},
+{cat:"Offchain resolution",id:"O2",prio:"P1",title:"Unknown offchain endpoint",desc:"Extract CCIP endpoint URL; flag if domain is newly registered, low reputation, or not tied to a known resolver operator.",where:["Python","Threat intel","Domain age API"],logic:`def check(endpoint_url):
+    domain = extract_domain(endpoint_url)
+    return (domain not in KNOWN_CCIP_OPERATORS or
+            domain_age(domain) < 30 or
+            vt_score(domain) > 0)`},
+{cat:"Offchain resolution",id:"O3",prio:"P1",title:"Response inconsistency across queries",desc:"Query the same ENS name multiple times or across time windows; flag if addr/text/contenthash differs unexpectedly.",where:["Python test harness","ENS SDK"],logic:`def check_consistency(name, n=5):
+    results = [ns.address(name) for _ in range(n)]
+    return len(set(results)) > 1  # inconsistent responses`},
+{cat:"Offchain resolution",id:"O4",prio:"P1",title:"Unsigned / unverifiable offchain response",desc:"Flag if CCIP/offchain response cannot be cryptographically verified per expected resolver logic.",where:["Python","EIP-3668 validator"],logic:`# Verify the resolver's signature on the offchain response
+# Per EIP-3668: response must be signed by trusted signer
+def verify_response(response, signer_allowlist):
+    recovered = ecrecover(response.hash, response.sig)
+    return recovered not in signer_allowlist`},
+{cat:"Offchain resolution",id:"O5",prio:"P2",title:"Endpoint uses suspicious URL pattern",desc:"Regex match on CCIP endpoint URL path for API/resolver/callback-style patterns.",where:["Regex","Python"],logic:`import re
+ENDPOINT_RE = re.compile(
+  r'(?i)(/api/resolve|/resolver|/gateway|/callback|/query|/ens|/record|/txt|/config|/cmd|/bot)'
+)`},
+{cat:"Offchain resolution",id:"O6",prio:"P2",title:"Centralised dependency on one server",desc:"Flag if resolution depends on a single endpoint/domain with no redundancy and no known operator.",where:["Crawler","Python"],logic:`def check(endpoint_urls):
+    domains = {extract_domain(u) for u in endpoint_urls}
+    return len(domains) == 1 and domains.pop() not in KNOWN_OPERATORS`},
+{cat:"Offchain resolution",id:"O7",prio:"P2",title:"Offchain endpoint linked to phishing infra",desc:"Cross-reference endpoint domain/IP/cert hash against phishing, malware, C2, or scam infrastructure lists.",where:["Threat intel","Python","URLScan","VirusTotal"],logic:`def check(endpoint_url):
+    domain = extract_domain(endpoint_url)
+    ip = resolve_ip(domain)
+    return (domain in PHISHING_DOMAINS or ip in MALICIOUS_IPS or
+            cert_hash(domain) in KNOWN_PHISHING_CERTS)`},
+
+{cat:"Campaign / behavioural correlation",id:"CB1",prio:"P1",title:"Shared owner across risky ENS names",desc:"Flag owner address controlling ≥ N names already flagged by any lexical/lure/content/record signal.",where:["Graph rule","Python","ENS subgraph"],logic:`SELECT owner, COUNT(*) as risky_count
+FROM ens_names
+WHERE is_risky = TRUE
+GROUP BY owner
+HAVING COUNT(*) >= 3`},
+{cat:"Campaign / behavioural correlation",id:"CB2",prio:"P1",title:"Shared resolved wallet across risky names",desc:"Flag wallets where multiple suspicious ENS names resolve to the same address or address cluster.",where:["Graph rule","Python"],logic:`SELECT resolved_addr, COUNT(*) as risky_names
+FROM ens_names
+WHERE is_risky = TRUE
+GROUP BY resolved_addr
+HAVING COUNT(*) >= 2`},
+{cat:"Campaign / behavioural correlation",id:"CB3",prio:"P1",title:"Shared phishing template",desc:"YARA/DOM-hash rule: multiple ENS contenthashes serve pages with same HTML structure, JS bundle, or assets.",where:["YARA","Python","DOM hashing"],logic:`import hashlib
+def dom_hash(html):
+    # Strip dynamic content (timestamps, nonces)
+    normalized = re.sub(r'\\d{10,}|nonce="[^"]+"', '', html)
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+# Group CIDs by dom_hash — if >= 2 risky names share hash → campaign`},
+{cat:"Campaign / behavioural correlation",id:"CB4",prio:"P1",title:"Full attack sequence detection",desc:"Detect the complete chain: dropcatch → resolver change → record update → victim transfer or phishing fetch.",where:["Dune Analytics","SQL","Graph rule"],logic:`-- Chain: registration → resolver_change → record_update → victim_transfer
+SELECT name
+FROM ens_event_chains
+WHERE has_dropcatch AND has_resolver_change
+  AND has_record_update AND (has_victim_transfer OR has_phishing_fetch)
+  AND chain_duration_days <= 30`},
+{cat:"Campaign / behavioural correlation",id:"CB5",prio:"P1",title:"Known malicious infrastructure overlap",desc:"Match wallets, URLs, domains, IPFS CIDs, JS hashes, resolver addresses, and CCIP endpoints against IOC blocklists.",where:["Threat intel","Python","IOC DB","VirusTotal","Chainabuse"],logic:`def check_ioc(entity, entity_type):
+    return IOC_DB.exists(entity_type=entity_type, value=entity)`},
+{cat:"Campaign / behavioural correlation",id:"CB6",prio:"P2",title:"Coordinated timing",desc:"Flag many ENS names updated by same owner/resolver within same block range or short time window.",where:["Dune Analytics","SQL"],logic:`SELECT owner, COUNT(*) as names_updated, MIN(block_number) as start_block
+FROM ens_events
+WHERE event IN ('AddrChanged','TextChanged','ContenthashChanged')
+GROUP BY owner, block_number / 100  -- bucket by ~100 blocks
+HAVING COUNT(*) >= 5`},
+{cat:"Campaign / behavioural correlation",id:"CB7",prio:"P2",title:"Scam cash-out pattern",desc:"Flag resolved wallets that receive funds then forward to a mixer, exchange deposit, bridge, or known consolidation wallet.",where:["Transaction graph","Python","Dune SQL"],logic:`# Detect: inbound → quick forward to mixer/bridge/CEX deposit
+SELECT from_addr
+FROM eth_transfers
+WHERE to_addr IN (SELECT addr FROM MIXERS UNION SELECT addr FROM CEX_DEPOSITS)
+  AND from_addr IN (SELECT resolved_addr FROM risky_ens_names)
+  AND block_time BETWEEN received_at AND received_at + INTERVAL '48 hours'`},
+{cat:"Campaign / behavioural correlation",id:"CB8",prio:"P2",title:"Reused deployment wallet",desc:"Flag same wallet deploying custom resolver contracts used by multiple suspicious ENS names.",where:["Graph rule","Etherscan","Python"],logic:`SELECT deployer, COUNT(DISTINCT resolver_addr) as resolvers_deployed
+FROM contract_deployments
+WHERE resolver_addr IN (SELECT resolver FROM risky_ens_names)
+GROUP BY deployer
+HAVING COUNT(DISTINCT resolver_addr) >= 2`},
+];
+
+const CATS = [...new Set(RULES.map(r=>r.cat))];
+let activePrio = 'all';
+
+function setPrio(p, btn) {
+  activePrio = p;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const root = document.getElementById('root');
+  let total = 0;
+
+  let html = '';
+  CATS.forEach(cat => {
+    const rules = RULES.filter(r =>
+      (activePrio === 'all' || r.prio === activePrio) &&
+      (!q || r.title.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q) || r.cat.toLowerCase().includes(q) || r.id.toLowerCase().includes(q))
+      && r.cat === cat
+    );
+    if (!rules.length) return;
+    total += rules.length;
+    html += `<div class="section"><div class="section-title">${cat}</div>`;
+    rules.forEach(r => {
+      html += `<div class="rule-card" id="card-${r.id}">
+        <div class="rule-header" onclick="toggle('${r.id}')" tabindex="0" onkeydown="if(event.key==='Enter')toggle('${r.id}')">
+          <span class="priority-badge ${r.prio.toLowerCase()}">${r.prio}</span>
+          <span class="rule-title">${r.id} — ${r.title}</span>
+          <span class="rule-tag">${r.where[0]}</span>
+          <i class="ti ti-chevron-down chevron" aria-hidden="true"></i>
+        </div>
+        <div class="rule-body">
+          <div class="rule-section"><div class="rule-section-label">Description</div>
+            <div class="desc">${r.desc}</div>
+          </div>
+          <div class="rule-section" style="margin-top:10px"><div class="rule-section-label">Where to set</div>
+            <div style="margin-top:4px">${r.where.map(w=>`<span class="where-tag">${w}</span>`).join('')}</div>
+          </div>
+          <div class="rule-section" style="margin-top:10px"><div class="rule-section-label">Detection logic</div>
+            <div class="code-block">${r.logic.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+
+  if (!total) html = `<div class="no-results">No rules match your filter.</div>`;
+  root.innerHTML = html;
+  document.getElementById('stats').textContent = `${total} rule${total===1?'':'s'}`;
+}
+
+function toggle(id) {
+  const card = document.getElementById('card-'+id);
+  card.classList.toggle('open');
+}
+
+render();
+</script>
